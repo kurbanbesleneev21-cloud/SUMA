@@ -14,6 +14,7 @@ import {
 } from '@/lib/supabase';
 import { loadOrCreateKeyPair } from '@/crypto/keys';
 import type { KeyPair } from '@/crypto/box';
+import { touchPresence } from '@/services/users';
 import type { Profile } from '@/types';
 
 interface AuthValue {
@@ -37,6 +38,8 @@ interface AuthValue {
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
+
+const PROFILE_COLUMNS = 'id, username, display_name, bio, avatar_url, public_key, created_at';
 
 const callbackUrl = () => Linking.createURL('auth-callback');
 
@@ -99,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async () => {
     const uid = session?.user.id;
     if (!uid) return;
-    const { data, error } = await sb().from('profiles').select('*').eq('id', uid).single();
+    const { data, error } = await sb().from('profiles').select(PROFILE_COLUMNS).eq('id', uid).single();
     if (error) throw error;
     setProfile(data as Profile);
   }, [session?.user.id]);
@@ -115,15 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       const { keys: kp } = await loadOrCreateKeyPair(uid);
-      const { data } = await sb().from('profiles').select('*').eq('id', uid).single();
+      const { data } = await sb().from('profiles').select(PROFILE_COLUMNS).eq('id', uid).single();
       let p = data as Profile | null;
       if (p && p.public_key !== kp.publicKey) {
         if (p.public_key) setKeyWasReplaced(true);
         const { data: updated } = await sb()
           .from('profiles')
-          .update({ public_key: kp.publicKey, last_seen_at: new Date().toISOString() })
+          .update({ public_key: kp.publicKey })
           .eq('id', uid)
-          .select()
+          .select(PROFILE_COLUMNS)
           .single();
         p = (updated as Profile) ?? p;
       }
@@ -143,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!uid) return;
     const beat = () => {
       if (AppState.currentState !== 'active') return;
-      sb().from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', uid).then(() => {});
+      touchPresence().catch(() => {});
     };
     beat();
     const t = setInterval(beat, 60_000);
@@ -202,7 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshProfile,
     updateProfile: async (patch) => {
       if (!session) throw new Error('not authenticated');
-      const { data, error } = await sb().from('profiles').update(patch).eq('id', session.user.id).select().single();
+      const { data, error } = await sb().from('profiles').update(patch).eq('id', session.user.id).select(PROFILE_COLUMNS).single();
       if (error) throw error;
       setProfile(data as Profile);
     },

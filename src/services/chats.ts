@@ -95,14 +95,31 @@ export const deleteMessage = async (id: string) => {
 };
 
 export const fetchPeerReadAt = async (chatId: string, peerId: string): Promise<string | null> => {
-  const { data } = await sb()
-    .from('chat_members')
-    .select('last_read_at')
-    .eq('chat_id', chatId)
-    .eq('user_id', peerId)
-    .maybeSingle();
-  return (data?.last_read_at as string | undefined) ?? null;
+  const { data, error } = await sb().rpc('peer_read_at', { c: chatId, peer: peerId });
+  if (error) throw error;
+  return (data as string | null) ?? null;
 };
+
+export const setChatPrefs = async (
+  chatId: string,
+  prefs: { pinned?: boolean; archived?: boolean; mutedUntil?: Date | null },
+) => {
+  const { error } = await sb().rpc('set_chat_prefs', {
+    c: chatId,
+    pinned: prefs.pinned ?? null,
+    archived: prefs.archived ?? null,
+    muted_until: prefs.mutedUntil ? prefs.mutedUntil.toISOString() : null,
+    unmute: prefs.mutedUntil === null,
+  });
+  if (error) throw error;
+};
+
+export const clearChatForMe = async (chatId: string) => {
+  const { error } = await sb().rpc('clear_chat_for_me', { c: chatId });
+  if (error) throw error;
+};
+
+export const isMuted = (mutedUntil: string | null) => !!mutedUntil && new Date(mutedUntil).getTime() > Date.now();
 
 export const fetchChatPeer = async (chatId: string, myId: string): Promise<string | null> => {
   const { data, error } = await sb().from('chat_members').select('user_id').eq('chat_id', chatId).neq('user_id', myId).limit(1);

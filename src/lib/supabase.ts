@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { secureStorage } from './secureStorage';
+import { t } from '@/i18n';
 
 export interface ServerConfig {
   url: string;
@@ -43,16 +44,16 @@ export const normalizeUrl =(url: string) => url.trim().replace(/\/+$/, '');
 
 // Confirms the URL is a reachable Supabase project and the key is accepted before saving it.
 export const verifyServerConfig = async (cfg: ServerConfig): Promise<void> => {
-  if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(cfg.url)) throw new Error('Адрес должен начинаться с https://');
-  if (isSecretKey(cfg.anonKey)) throw new Error('Это секретный ключ service_role. Используйте публичный ключ anon.');
+  if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(cfg.url)) throw new Error(t('setup.errHttps'));
+  if (isSecretKey(cfg.anonKey)) throw new Error(t('setup.errSecret'));
   let res: Response;
   try {
     res = await fetch(`${cfg.url}/auth/v1/settings`, { headers: { apikey: cfg.anonKey } });
   } catch {
-    throw new Error('Сервер недоступен. Проверьте адрес и интернет.');
+    throw new Error(t('setup.errUnreachable'));
   }
-  if (res.status === 401 || res.status === 403) throw new Error('Ключ не подходит к этому проекту.');
-  if (!res.ok) throw new Error(`Сервер ответил ошибкой ${res.status}.`);
+  if (res.status === 401 || res.status === 403) throw new Error(t('setup.errKey'));
+  if (!res.ok) throw new Error(t('setup.errStatus', { status: res.status }));
 };
 
 export const saveServerConfig = (cfg: ServerConfig) =>
@@ -75,7 +76,7 @@ export const initSupabase = (cfg: ServerConfig): SupabaseClient => {
 };
 
 export const sb = (): SupabaseClient => {
-  if (!client) throw new Error('Сервер не настроен');
+  if (!client) throw new Error(t('setup.notConfigured'));
   return client;
 };
 

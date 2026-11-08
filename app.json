@@ -2,7 +2,7 @@
   "expo": {
     "name": "NEXO",
     "slug": "nexo-messenger",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "scheme": "nexo",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,17 +10,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nexo.messenger",
-      "buildNumber": "1",
+      "buildNumber": "3",
       "config": {
         "usesNonExemptEncryption": true
       }
     },
     "android": {
       "package": "com.nexo.messenger",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B0B12"
+        "backgroundColor": "#090910"
       },
       "softwareKeyboardLayoutMode": "resize",
       "allowBackup": false
@@ -34,7 +34,15 @@
         {
           "image": "./assets/splash-icon.png",
           "imageWidth": 160,
-          "backgroundColor": "#0B0B12"
+          "backgroundColor": "#090910"
+        }
+      ],
+      "expo-localization",
+      "./plugins/withReleaseSigning",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "NEXO использует Face ID, чтобы разблокировать приложение."
         }
       ]
     ],

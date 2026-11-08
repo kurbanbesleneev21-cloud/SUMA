@@ -1,44 +1,65 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { palettes, Palette } from '@/constants/theme';
+import { AccentId, accents, buildPalette, Palette } from '@/constants/theme';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
+export type TextSize = 'small' | 'normal' | 'large';
 
-interface ThemeValue {
+interface Appearance {
   mode: ThemeMode;
-  scheme: 'dark' | 'light';
-  colors: Palette;
-  setMode: (mode: ThemeMode) => void;
+  accent: AccentId;
+  textSize: TextSize;
+  animations: boolean;
 }
 
+interface ThemeValue extends Appearance {
+  scheme: 'dark' | 'light';
+  colors: Palette;
+  fs: (size: number) => number;
+  update: (patch: Partial<Appearance>) => void;
+}
+
+const KEY = 'nexo_appearance_v1';
+const defaults: Appearance = { mode: 'dark', accent: 'violet', textSize: 'normal', animations: true };
+const scale: Record<TextSize, number> = { small: 0.9, normal: 1, large: 1.15 };
+
 const ThemeContext = createContext<ThemeValue | null>(null);
-const KEY = 'nexo_theme_mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useColorScheme();
-  const [mode, setModeState] = useState<ThemeMode>('dark');
+  const [state, setState] = useState<Appearance>(defaults);
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
-      .then((v) => {
-        if (v === 'dark' || v === 'light' || v === 'system') setModeState(v);
+      .then((raw) => {
+        if (!raw) return;
+        const saved = JSON.parse(raw) as Partial<Appearance>;
+        setState((s) => ({
+          mode: saved.mode && ['dark', 'light', 'system'].includes(saved.mode) ? saved.mode : s.mode,
+          accent: saved.accent && saved.accent in accents ? saved.accent : s.accent,
+          textSize: saved.textSize && saved.textSize in scale ? saved.textSize : s.textSize,
+          animations: typeof saved.animations === 'boolean' ? saved.animations : s.animations,
+        }));
       })
       .catch(() => {});
   }, []);
 
   const value = useMemo<ThemeValue>(() => {
-    const scheme = mode === 'system' ? (system === 'light' ? 'light' : 'dark') : mode;
+    const scheme = state.mode === 'system' ? (system === 'light' ? 'light' : 'dark') : state.mode;
     return {
-      mode,
+      ...state,
       scheme,
-      colors: palettes[scheme],
-      setMode: (m) => {
-        setModeState(m);
-        AsyncStorage.setItem(KEY, m).catch(() => {});
-      },
+      colors: buildPalette(scheme, state.accent),
+      fs: (size) => Math.round(size * scale[state.textSize]),
+      update: (patch) =>
+        setState((s) => {
+          const next = { ...s, ...patch };
+          AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
+          return next;
+        }),
     };
-  }, [mode, system]);
+  }, [state, system]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

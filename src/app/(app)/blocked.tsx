@@ -5,10 +5,12 @@ import { useColors } from '@/contexts/ThemeContext';
 import { Avatar, EmptyState, ErrorBanner, Header, Loading } from '@/components/ui';
 import { listBlocked, unblockUser } from '@/services/users';
 import { humanError } from '@/utils/errors';
+import { useT } from '@/i18n';
 import type { Profile } from '@/types';
 
 export default function BlockedScreen() {
   const c = useColors();
+  const t = useT();
   const { session } = useAuth();
   const [list, setList] = useState<Profile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +33,13 @@ export default function BlockedScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
-      <Header title="Заблокированные" back />
+      <Header title={t('privacy.blocked')} back />
       {error ? <ErrorBanner message={error} onRetry={load} /> : null}
       <FlatList
         data={list}
         keyExtractor={(p) => p.id}
         contentContainerStyle={{ flexGrow: 1 }}
-        ListEmptyComponent={<EmptyState icon="happy" title="Список пуст" text="Заблокированные пользователи не смогут писать вам." />}
+        ListEmptyComponent={<EmptyState icon="happy" title={t('blocked.emptyTitle')} text={t('blocked.emptyText')} />}
         renderItem={({ item }) => (
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
             <Avatar name={item.display_name} seed={item.id} size={44} />
@@ -56,7 +58,7 @@ export default function BlockedScreen() {
               }}
               style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: c.surfaceAlt }}
             >
-              <Text style={{ color: c.primary, fontWeight: '600' }}>Разблокировать</Text>
+              <Text style={{ color: c.primary, fontWeight: '600' }}>{t('user.unblock')}</Text>
             </Pressable>
           </View>
         )}

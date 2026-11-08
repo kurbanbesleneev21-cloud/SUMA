@@ -5,10 +5,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/contexts/ThemeContext';
 import { Avatar, Button, Field, Header } from '@/components/ui';
 import { humanError } from '@/utils/errors';
-import { USERNAME_RE } from '@/utils/format';
+import { fullDate, USERNAME_RE } from '@/utils/format';
+import { useT } from '@/i18n';
 
 export default function ProfileScreen() {
   const c = useColors();
+  const t = useT();
   const router = useRouter();
   const { profile, updateProfile } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
@@ -19,9 +21,9 @@ export default function ProfileScreen() {
 
   const save = async () => {
     const e: Record<string, string> = {};
-    if (!displayName.trim()) e.displayName = 'Имя не может быть пустым.';
-    if (!USERNAME_RE.test(username)) e.username = '3–24 символа: латиница, цифры, _';
-    if (bio.length > 300) e.bio = 'Не больше 300 символов.';
+    if (!displayName.trim()) e.displayName = t('auth.enterName');
+    if (!USERNAME_RE.test(username)) e.username = t('auth.usernameRule');
+    if (bio.length > 300) e.bio = t('profile.bioTooLong');
     setErrors(e);
     if (Object.keys(e).length) return;
     setBusy(true);
@@ -29,7 +31,7 @@ export default function ProfileScreen() {
       await updateProfile({ display_name: displayName.trim(), username, bio: bio.trim() });
       router.back();
     } catch (err) {
-      Alert.alert('Не удалось сохранить', humanError(err));
+      Alert.alert(t('profile.saveFailed'), humanError(err));
     } finally {
       setBusy(false);
     }
@@ -37,21 +39,17 @@ export default function ProfileScreen() {
 
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.background }}>
-      <Header title="Профиль" back />
+      <Header title={t('profile.title')} back />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={{ alignItems: 'center', marginBottom: 24 }}>
-          <Avatar name={displayName || '?'} seed={profile?.id ?? 'me'} size={104} />
-          <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' }}>
-            Загрузка фото аватара появится вместе с зашифрованными вложениями.
-          </Text>
+          <Avatar name={displayName || '?'} seed={profile?.id ?? 'me'} size={108} />
+          <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' }}>{t('profile.photoLater')}</Text>
         </View>
-        <Field label="Имя" icon="person" value={displayName} onChangeText={setDisplayName} maxLength={64} error={errors.displayName} />
-        <Field label="Username" icon="at" value={username} onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, ''))} autoCapitalize="none" maxLength={24} error={errors.username} />
-        <Field label="О себе" icon="document-text" value={bio} onChangeText={setBio} multiline maxLength={300} error={errors.bio} placeholder="Пара слов о себе" style={{ minHeight: 80, textAlignVertical: 'top' }} />
-        <Text style={{ color: c.textMuted, fontSize: 12, marginBottom: 16, marginLeft: 4 }}>
-          На сервисе с {profile ? new Date(profile.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '…'}
-        </Text>
-        <Button title="Сохранить" onPress={save} loading={busy} />
+        <Field label={t('auth.name')} icon="person" value={displayName} onChangeText={setDisplayName} maxLength={64} error={errors.displayName} />
+        <Field label={t('auth.username')} icon="at" value={username} onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))} autoCapitalize="none" maxLength={24} error={errors.username} />
+        <Field label={t('profile.bio')} icon="document-text" value={bio} onChangeText={setBio} multiline maxLength={300} error={errors.bio} placeholder={t('profile.bioPlaceholder')} style={{ minHeight: 80, textAlignVertical: 'top' }} />
+        <Text style={{ color: c.textMuted, fontSize: 12, marginBottom: 16, marginLeft: 4 }}>{t('profile.since', { date: profile ? fullDate(profile.created_at) : '…' })}</Text>
+        <Button title={t('common.save')} onPress={save} loading={busy} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
