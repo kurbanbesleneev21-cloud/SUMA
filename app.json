@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "NEXO",
+    "slug": "nexo-messenger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.nexo.messenger",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.nexo.messenger",
+      "versionCode": 1
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Разрешить NEXO доступ к вашим фотографиям",
+          "cameraPermission": "Разрешить NEXO доступ к вашей камере",
+          "microphonePermission": "Разрешить NEXO доступ к микрофону"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Разрешить NEXO доступ к микрофону"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#7C3AED"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "nexo-project"
+      }
+    }
+  }
+}
