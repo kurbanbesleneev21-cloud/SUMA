@@ -2,7 +2,7 @@
   "name": "nexo-messenger",
   "version": "1.0.0",
   "description": "NEXO - Secure End-to-End Encrypted Messenger",
-  "main": "index.js",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "dev": "expo start --dev-client",
@@ -16,7 +16,7 @@
     "submit-android": "eas submit --platform android",
     "submit-ios": "eas submit --platform ios",
     "lint": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --no-warnings --test tests/*.test.mts"
   },
   "repository": {
     "type": "git",
@@ -30,34 +30,33 @@
   },
   "homepage": "https://github.com/kurbanbesleneev21-cloud/suma#readme",
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "12.0.1",
     "@supabase/supabase-js": "^2.119.0",
-    "@types/react": "^19.3.0",
-    "@types/react-native": "^0.72.8",
     "expo": "^58.0.23",
-    "expo-av": "^16.0.8",
-    "expo-camera": "^58.0.14",
     "expo-constants": "^58.0.15",
-    "expo-document-picker": "^58.0.4",
-    "expo-file-system": "^58.0.13",
-    "expo-image": "^58.0.18",
-    "expo-image-picker": "^58.0.10",
+    "expo-crypto": "~58.0.7",
+    "expo-font": "~58.0.11",
     "expo-linking": "^58.0.16",
-    "expo-notifications": "^58.1.8",
     "expo-router": "^58.0.30",
+    "expo-secure-store": "~58.0.2",
     "expo-splash-screen": "^58.0.13",
     "expo-status-bar": "^58.0.4",
-    "react": "^19.3.1",
+    "expo-system-ui": "~58.0.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-native": "^0.88.1",
-    "react-native-gesture-handler": "^3.5.0",
+    "react-native-gesture-handler": "~3.3.0",
     "react-native-safe-area-context": "^5.11.1",
-    "react-native-safe-area-view": "^2.0.0",
     "react-native-screens": "^4.30.1",
-    "react-native-svg": "^15.16.1",
-    "react-native-uuid": "^2.0.4",
-    "sodium-plus": "^0.9.0",
+    "react-native-svg": "15.16.0",
+    "react-native-url-polyfill": "^4.0.0",
     "tweetnacl": "^1.0.3",
-    "typescript": "^7.0.2",
-    "uuid": "^14.0.3"
+    "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "~6.0.3"
   }
 }

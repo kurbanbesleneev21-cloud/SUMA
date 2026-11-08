@@ -3,60 +3,43 @@
     "name": "NEXO",
     "slug": "nexo-messenger",
     "version": "1.0.0",
+    "scheme": "nexo",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
-    "userInterfaceStyle": "dark",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "bundleIdentifier": "com.nexo.messenger",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": true
+      }
     },
     "android": {
+      "package": "com.nexo.messenger",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#0B0B12"
       },
-      "package": "com.nexo.messenger",
-      "versionCode": 1
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "softwareKeyboardLayoutMode": "resize",
+      "allowBackup": false
     },
     "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
       [
-        "expo-image-picker",
+        "expo-splash-screen",
         {
-          "photosPermission": "Разрешить NEXO доступ к вашим фотографиям",
-          "cameraPermission": "Разрешить NEXO доступ к вашей камере",
-          "microphonePermission": "Разрешить NEXO доступ к микрофону"
-        }
-      ],
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Разрешить NEXO доступ к микрофону"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#7C3AED"
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#0B0B12"
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "nexo-project"
-      }
+    "experiments": {
+      "typedRoutes": false
     }
   }
 }

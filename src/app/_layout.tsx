@@ -1,63 +1,52 @@
-import React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { ThemeProvider } from '@/contexts/ThemeContext';
+import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { OfflineBanner } from '@/components/ui';
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const RootLayoutNav = () => {
-  const { isAuthenticated, loading } = useAuth();
+function Navigation() {
+  const { ready, configured, session } = useAuth();
+  const { scheme, colors } = useTheme();
 
-  React.useEffect(() => {
-    if (!loading) {
-      SplashScreen.hideAsync();
-    }
-  }, [loading]);
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
 
-  if (loading) {
-    return <Stack />;
-  }
+  if (!ready) return null;
 
   return (
     <>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          cardStyle: { backgroundColor: '#000000' },
-          animationEnabled: true,
-        }}
-      >
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Group screenOptions={{ presentation: 'modal' }}>
-              <Stack.Screen name="chat/[id]" />
-              <Stack.Screen name="profile" />
-              <Stack.Screen name="blocked-users" />
-              <Stack.Screen name="change-password" />
-              <Stack.Screen name="notifications" />
-              <Stack.Screen name="create-group" />
-              <Stack.Screen name="group/[id]" />
-            </Stack.Group>
-          </>
-        ) : (
-          <Stack.Screen name="auth" options={{ headerShown: false }} />
-        )}
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'slide_from_right' }}>
+        <Stack.Protected guard={!configured}>
+          <Stack.Screen name="setup" />
+        </Stack.Protected>
+        <Stack.Protected guard={configured && !session}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+        <Stack.Protected guard={configured && !!session}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Screen name="auth-callback" />
       </Stack>
+      <OfflineBanner />
     </>
   );
-};
+}
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Navigation />
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
