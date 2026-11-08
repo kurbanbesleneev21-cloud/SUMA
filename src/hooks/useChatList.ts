@@ -6,6 +6,19 @@ import { decryptText, KeyPair } from '@/crypto/box';
 import { humanError } from '@/utils/errors';
 import { t } from '@/i18n';
 import type { ChatListItem } from '@/types';
+import { decodePayload, Payload } from '@/services/payload';
+
+export const payloadSummary = (p: Payload) => {
+  if (!p.att.length) return p.text;
+  const first = p.att[0];
+  const label =
+    first.kind === 'image'
+      ? `📷 ${p.att.length > 1 ? t('attach.photos', { n: p.att.length }) : t('attach.photo')}`
+      : first.kind === 'video'
+        ? `🎬 ${p.att.length > 1 ? t('attach.videos', { n: p.att.length }) : t('attach.video')}`
+        : `📄 ${p.att.length > 1 ? t('attach.files', { n: p.att.length }) : first.name}`;
+  return p.text ? `${label} · ${p.text}` : label;
+};
 
 export const chatPreview = (item: ChatListItem, keys: KeyPair | null, myId: string) => {
   if (item.last_deleted) return t('chat.deleted');
@@ -15,7 +28,7 @@ export const chatPreview = (item: ChatListItem, keys: KeyPair | null, myId: stri
     { ciphertext: item.last_ciphertext, nonce: item.last_nonce!, senderKey: item.last_sender_key!, recipientKey: item.last_recipient_key! },
     keys,
   );
-  const body = text ?? `🔒 ${t('chat.cannotDecryptShort')}`;
+  const body = text === null ? `🔒 ${t('chat.cannotDecryptShort')}` : payloadSummary(decodePayload(text, item.chat_id));
   return item.last_sender_id === myId ? `${t('chats.you')}: ${body}` : body;
 };
 

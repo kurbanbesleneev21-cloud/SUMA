@@ -49,14 +49,14 @@ export default function SettingsScreen() {
             <Row icon="shield-half" label={t('settings.privacy')} hint={t('settings.privacyHint')} onPress={() => router.push('/prefs/privacy')} />
             <Row icon="lock-closed" label={t('settings.security')} hint={lock.pinEnabled ? t('settings.securityHintOn') : t('settings.securityHint')} onPress={() => router.push('/prefs/security')} />
             <Row icon="color-palette" label={t('settings.appearance')} value={themeLabel} onPress={() => router.push('/prefs/appearance')} />
-            <Row icon="language" label={t('settings.language')} value={localeNames[locale]} onPress={() => router.push('/prefs/language')} last />
+            <Row icon="language" label={t('settings.language')} value={localeNames[locale]} onPress={() => router.push('/prefs/language')} />
+            <Row icon="server" label={t('settings.data')} onPress={() => router.push('/prefs/data')} last />
           </Section>
         </Animated.View>
 
         <Animated.View entering={entering(100)}>
           <Section footer={t('settings.pendingFooter')}>
-            <Row icon="notifications" label={t('settings.notifications')} value={t('settings.stage5')} />
-            <Row icon="server" label={t('settings.data')} value={t('settings.stage3')} last />
+            <Row icon="notifications" label={t('settings.notifications')} value={t('settings.stage5')} last />
           </Section>
         </Animated.View>
 

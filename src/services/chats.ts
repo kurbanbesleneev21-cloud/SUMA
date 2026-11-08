@@ -1,6 +1,9 @@
 import { sb } from '@/lib/supabase';
 import { encryptText, decryptText, KeyPair } from '@/crypto/box';
 import type { ChatListItem, DecryptedMessage, MessageRow } from '@/types';
+import { decodePayload, encodePayload, Payload } from './payload';
+import { deleteAttachmentObjects } from './attachments';
+import { t } from '@/i18n';
 
 export const MAX_MESSAGE_LENGTH = 4000;
 const PAGE = 40;
@@ -21,13 +24,13 @@ export const markChatRead = async (chatId: string) => {
   await sb().rpc('mark_chat_read', { c: chatId });
 };
 
-export const decryptRow = (row: MessageRow, keys: KeyPair): DecryptedMessage => ({
-  ...row,
-  text: row.deleted_at ? null : decryptText(
-    { ciphertext: row.ciphertext, nonce: row.nonce, senderKey: row.sender_key, recipientKey: row.recipient_key },
-    keys,
-  ),
-});
+export const decryptRow = (row: MessageRow, keys: KeyPair): DecryptedMessage => {
+  const plain = row.deleted_at
+    ? null
+    : decryptText({ ciphertext: row.ciphertext, nonce: row.nonce, senderKey: row.sender_key, recipientKey: row.recipient_key }, keys);
+  const payload = plain === null ? null : decodePayload(plain, row.chat_id);
+  return { ...row, text: payload ? payload.text : null, payload };
+};
 
 export const fetchMessages = async (chatId: string, before?: string): Promise<MessageRow[]> => {
   let q = sb().from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: false }).limit(PAGE);
@@ -37,21 +40,30 @@ export const fetchMessages = async (chatId: string, before?: string): Promise<Me
   return (data ?? []) as MessageRow[];
 };
 
-const validate = (text: string) => {
-  const t = text.trim();
-  if (!t) throw new Error('empty message');
-  if (t.length > MAX_MESSAGE_LENGTH) throw new Error(`Сообщение длиннее ${MAX_MESSAGE_LENGTH} символов`);
-  return t;
+// Messages newer than `after`, oldest first; used to catch up on realtime events missed during reconnects.
+export const fetchMessagesAfter = async (chatId: string, after: string): Promise<MessageRow[]> => {
+  const { data, error } = await sb().from('messages').select('*').eq('chat_id', chatId).gt('created_at', after).order('created_at', { ascending: true }).limit(100);
+  if (error) throw error;
+  return (data ?? []) as MessageRow[];
 };
+
+const validate = (p: Payload): Payload => {
+  const text = p.text.trim();
+  if (!text && !p.att.length) throw new Error('empty message');
+  if (text.length > MAX_MESSAGE_LENGTH) throw new Error(t('chat.tooLong', { max: MAX_MESSAGE_LENGTH }));
+  return { text, att: p.att };
+};
+
+const seal = (payload: Payload, keys: KeyPair, peerPublicKey: string) => encryptText(encodePayload(validate(payload)), keys, peerPublicKey);
 
 export const sendMessage = async (p: {
   chatId: string;
-  text: string;
+  payload: Payload;
   keys: KeyPair;
   peerPublicKey: string;
   replyTo?: string | null;
 }): Promise<MessageRow> => {
-  const env = encryptText(validate(p.text), p.keys, p.peerPublicKey);
+  const env = seal(p.payload, p.keys, p.peerPublicKey);
   const { data, error } = await sb()
     .from('messages')
     .insert({
@@ -68,8 +80,8 @@ export const sendMessage = async (p: {
   return data as MessageRow;
 };
 
-export const editMessage = async (p: { id: string; text: string; keys: KeyPair; peerPublicKey: string }) => {
-  const env = encryptText(validate(p.text), p.keys, p.peerPublicKey);
+export const editMessage = async (p: { id: string; payload: Payload; keys: KeyPair; peerPublicKey: string }) => {
+  const env = seal(p.payload, p.keys, p.peerPublicKey);
   const { data, error } = await sb()
     .from('messages')
     .update({
@@ -86,12 +98,14 @@ export const editMessage = async (p: { id: string; text: string; keys: KeyPair; 
   return data as MessageRow;
 };
 
-export const deleteMessage = async (id: string) => {
+// Deleting for everyone also removes the encrypted files from storage.
+export const deleteMessage = async (message: { id: string; payload: Payload | null }) => {
   const { error } = await sb()
     .from('messages')
     .update({ ciphertext: '', deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', message.id);
   if (error) throw error;
+  if (message.payload?.att.length) await deleteAttachmentObjects(message.payload.att).catch(() => {});
 };
 
 export const fetchPeerReadAt = async (chatId: string, peerId: string): Promise<string | null> => {

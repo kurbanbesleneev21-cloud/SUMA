@@ -7,8 +7,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCalls } from '@/contexts/CallContext';
 import { useColors, useTheme } from '@/contexts/ThemeContext';
 import { ActionSheet, Avatar, ErrorBanner, Loading, SheetAction, tap } from '@/components/ui';
+import { MessageAttachments, UploadState } from '@/components/Attachments';
+import { AttachmentComposer } from '@/components/AttachmentComposer';
+import { captureWithCamera, pickDocuments, pickFromGallery } from '@/hooks/useAttachmentPicker';
+import { AttachmentError, PickedItem, prepareImage, uploadAttachment, validatePicked } from '@/services/attachments';
+import { AttachmentRef, MAX_ATTACHMENTS } from '@/services/payload';
 import { usePresence } from '@/components/PeopleList';
 import { sb } from '@/lib/supabase';
 import { secureStorage } from '@/lib/secureStorage';
@@ -19,6 +25,7 @@ import {
   editMessage,
   fetchChatPeer,
   fetchMessages,
+  fetchMessagesAfter,
   fetchPeerReadAt,
   isMuted,
   markChatRead,
@@ -29,11 +36,12 @@ import {
 import { getProfile } from '@/services/users';
 import { dayLabel, presenceLabel, timeShort } from '@/utils/format';
 import { humanError } from '@/utils/errors';
+import { payloadSummary } from '@/hooks/useChatList';
 import { useT } from '@/i18n';
 import type { DecryptedMessage, MessageRow, Profile } from '@/types';
 import { radius } from '@/constants/theme';
 
-type Pending = DecryptedMessage & { pending?: boolean };
+type Pending = DecryptedMessage & { pending?: boolean; pendingItems?: PickedItem[]; upload?: UploadState; failed?: boolean };
 const draftKey = (chatId: string) => `nexo_draft_${chatId}`;
 
 export default function ChatScreen() {
@@ -44,6 +52,7 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { id: chatId } = useLocalSearchParams<{ id: string }>();
   const { session, keys } = useAuth();
+  const calls = useCalls();
   const myId = session!.user.id;
 
   const [peer, setPeer] = useState<Profile | null>(null);
@@ -61,12 +70,15 @@ export default function ChatScreen() {
   const [msgMenu, setMsgMenu] = useState<Pending | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [attachMenu, setAttachMenu] = useState(false);
+  const [picked, setPicked] = useState<PickedItem[] | null>(null);
+  const uploads = useRef(new Map<string, { items: PickedItem[]; refs: (AttachmentRef | null)[]; caption: string; original: boolean; replyTo: string | null }>());
   const typingChannel = useRef<ReturnType<ReturnType<typeof sb>['channel']> | null>(null);
   const lastTypingSent = useRef(0);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presence = usePresence(peer ? [peer.id] : [])[peer?.id ?? ''];
 
-  const decrypt = useCallback((row: MessageRow): Pending => (keys ? decryptRow(row, keys) : { ...row, text: null }), [keys]);
+  const decrypt = useCallback((row: MessageRow): Pending => (keys ? decryptRow(row, keys) : { ...row, text: null, payload: null }), [keys]);
 
   const upsert = useCallback(
     (row: MessageRow) =>
@@ -106,6 +118,21 @@ export default function ChatScreen() {
     if (keys) load();
   }, [keys, load]);
 
+  // Realtime can drop events while reconnecting; pull anything newer than what is on screen.
+  const newestRef = useRef<string | null>(null);
+  newestRef.current = messages?.find((m) => !m.pending)?.created_at ?? null;
+  const catchUp = useCallback(async () => {
+    const after = newestRef.current;
+    if (!after || !keys) return;
+    try {
+      const rows = await fetchMessagesAfter(chatId, after);
+      rows.forEach(upsert);
+      if (rows.some((r) => r.sender_id !== myId) && AppState.currentState === 'active') markChatRead(chatId).catch(() => {});
+    } catch {
+      // next tick will retry
+    }
+  }, [chatId, keys, upsert, myId]);
+
   // Drafts survive leaving the chat and restarting the app; stored encrypted at rest by the OS keystore.
   useEffect(() => {
     secureStorage.getItem(draftKey(chatId)).then((d) => d && setText((cur) => cur || d)).catch(() => {});
@@ -134,7 +161,10 @@ export default function ChatScreen() {
         const row = payload.new as { user_id: string };
         if (row.user_id !== myId) fetchPeerReadAt(chatId, row.user_id).then(setPeerReadAt).catch(() => {});
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') catchUp();
+      });
+    const catchUpTimer = setInterval(catchUp, 15_000);
 
     const typing = sb()
       .channel(`typing:${chatId}`)
@@ -148,11 +178,12 @@ export default function ChatScreen() {
     typingChannel.current = typing;
 
     return () => {
+      clearInterval(catchUpTimer);
       sb().removeChannel(ch);
       sb().removeChannel(typing);
       if (typingTimeout.current) clearTimeout(typingTimeout.current);
     };
-  }, [chatId, myId, upsert]);
+  }, [chatId, myId, upsert, catchUp]);
 
   const onChangeText = (v: string) => {
     setText(v);
@@ -186,7 +217,7 @@ export default function ChatScreen() {
       setEditing(null);
       setText('');
       try {
-        upsert(await editMessage({ id: target.id, text: body, keys, peerPublicKey: peer.public_key }));
+        upsert(await editMessage({ id: target.id, payload: { text: body, att: target.payload?.att ?? [] }, keys, peerPublicKey: peer.public_key }));
       } catch (e) {
         Alert.alert(t('chat.editFailed'), humanError(e));
       }
@@ -195,7 +226,7 @@ export default function ChatScreen() {
     const tempId = `pending-${Date.now()}`;
     const optimistic: Pending = {
       id: tempId, chat_id: chatId, sender_id: myId, ciphertext: '', nonce: '', sender_key: '', recipient_key: '',
-      reply_to: replyTo?.id ?? null, created_at: new Date().toISOString(), edited_at: null, deleted_at: null, text: body, pending: true,
+      reply_to: replyTo?.id ?? null, created_at: new Date().toISOString(), edited_at: null, deleted_at: null, text: body, payload: { text: body, att: [] }, pending: true,
     };
     setMessages((prev) => [optimistic, ...(prev ?? [])]);
     setText('');
@@ -203,7 +234,7 @@ export default function ChatScreen() {
     const reply = replyTo;
     setReplyTo(null);
     try {
-      const row = await sendMessage({ chatId, text: body, keys, peerPublicKey: peer.public_key, replyTo: reply?.id });
+      const row = await sendMessage({ chatId, payload: { text: body, att: [] }, keys, peerPublicKey: peer.public_key, replyTo: reply?.id });
       setMessages((prev) => (prev ?? []).filter((m) => m.id !== tempId && m.id !== row.id));
       upsert(row);
     } catch (e) {
@@ -213,6 +244,79 @@ export default function ChatScreen() {
       Alert.alert(t('chat.sendFailed'), humanError(e));
     }
   };
+
+  const patchPending = (tempId: string, patch: Partial<Pending>) =>
+    setMessages((prev) => (prev ?? []).map((m) => (m.id === tempId ? { ...m, ...patch } : m)));
+
+  // Prepare → encrypt → upload each file, then send one E2E message carrying the per-file keys.
+  // Already uploaded files are kept on retry.
+  const runUpload = async (tempId: string) => {
+    const job = uploads.current.get(tempId);
+    if (!job || !keys || !peer?.public_key) return;
+    const progress: number[] = job.items.map((_, i) => (job.refs[i] ? 1 : 0));
+    patchPending(tempId, { failed: false, upload: { progress: [...progress] } });
+    try {
+      for (let i = 0; i < job.items.length; i++) {
+        if (job.refs[i]) continue;
+        const item = job.items[i].kind === 'image' ? await prepareImage(job.items[i], job.original) : job.items[i];
+        job.refs[i] = await uploadAttachment(chatId, item, (step) => {
+          progress[i] = step.stage === 'encrypting' ? step.fraction * 0.1 : 0.1 + step.fraction * 0.9;
+          patchPending(tempId, { upload: { progress: [...progress] } });
+        });
+        progress[i] = 1;
+      }
+      const row = await sendMessage({ chatId, payload: { text: job.caption, att: job.refs as AttachmentRef[] }, keys, peerPublicKey: peer.public_key, replyTo: job.replyTo });
+      uploads.current.delete(tempId);
+      setMessages((prev) => (prev ?? []).filter((m) => m.id !== tempId && m.id !== row.id));
+      upsert(row);
+    } catch (e) {
+      patchPending(tempId, { failed: true, upload: { progress, error: humanError(e) } });
+    }
+  };
+
+  const sendAttachments = (caption: string, original: boolean) => {
+    const items = picked ?? [];
+    setPicked(null);
+    if (!items.length) return;
+    const tempId = `pending-${Date.now()}`;
+    uploads.current.set(tempId, { items, refs: items.map(() => null), caption: caption.trim(), original, replyTo: replyTo?.id ?? null });
+    const optimistic: Pending = {
+      id: tempId, chat_id: chatId, sender_id: myId, ciphertext: '', nonce: '', sender_key: '', recipient_key: '',
+      reply_to: replyTo?.id ?? null, created_at: new Date().toISOString(), edited_at: null, deleted_at: null,
+      text: caption.trim(), payload: { text: caption.trim(), att: [] }, pending: true, pendingItems: items, upload: { progress: items.map(() => 0) },
+    };
+    setReplyTo(null);
+    setMessages((prev) => [optimistic, ...(prev ?? [])]);
+    runUpload(tempId);
+  };
+
+  const addPicked = async (pick: () => Promise<PickedItem[]>) => {
+    try {
+      const got = await pick();
+      if (!got.length) return;
+      const ok: PickedItem[] = [];
+      const problems: string[] = [];
+      for (const item of got) {
+        try {
+          validatePicked(item);
+          ok.push(item);
+        } catch (e) {
+          problems.push(e instanceof AttachmentError ? e.message : humanError(e));
+        }
+      }
+      if (problems.length) Alert.alert(t('attach.someSkipped'), problems.join('\n'));
+      if (ok.length) setPicked((cur) => [...(cur ?? []), ...ok].slice(0, MAX_ATTACHMENTS));
+    } catch (e) {
+      Alert.alert(t('common.error'), humanError(e));
+    }
+  };
+
+  const attachActions: SheetAction[] = [
+    { label: t('attach.camera'), icon: 'camera', onPress: () => addPicked(() => captureWithCamera('photo')) },
+    { label: t('attach.cameraVideo'), icon: 'videocam', onPress: () => addPicked(() => captureWithCamera('video')) },
+    { label: t('attach.gallery'), icon: 'images', onPress: () => addPicked(pickFromGallery) },
+    { label: t('attach.document'), icon: 'document-attach', onPress: () => addPicked(pickDocuments) },
+  ];
 
   const messageActions = (m: Pending): SheetAction[] => {
     const own = m.sender_id === myId;
@@ -227,11 +331,17 @@ export default function ChatScreen() {
         onPress: () =>
           Alert.alert(t('chat.deleteTitle'), t('chat.deleteText'), [
             { text: t('common.cancel'), style: 'cancel' },
-            { text: t('common.delete'), style: 'destructive', onPress: () => deleteMessage(m.id).catch((e) => Alert.alert(t('common.error'), humanError(e))) },
+            { text: t('common.delete'), style: 'destructive', onPress: () => deleteMessage(m).catch((e) => Alert.alert(t('common.error'), humanError(e))) },
           ]),
       });
     }
     return list;
+  };
+
+  const openMenu = (item: Pending) => {
+    if (item.pending || item.deleted_at) return;
+    tap();
+    setMsgMenu(item);
   };
 
   const muted = isMuted(mutedUntil);
@@ -304,6 +414,16 @@ export default function ChatScreen() {
                 <Text style={{ color: statusActive ? c.primary : c.textMuted, fontSize: 12 }}>{status}</Text>
               </View>
             </Pressable>
+            {peer?.public_key ? (
+              <>
+                <Pressable onPress={() => calls.startOutgoing({ chatId, peer, video: false })} hitSlop={8} accessibilityLabel={t('calls.audioCall')} style={{ padding: 6 }}>
+                  <Ionicons name="call-outline" size={22} color={c.text} />
+                </Pressable>
+                <Pressable onPress={() => calls.startOutgoing({ chatId, peer, video: true })} hitSlop={8} accessibilityLabel={t('calls.videoCall')} style={{ padding: 6 }}>
+                  <Ionicons name="videocam-outline" size={24} color={c.text} />
+                </Pressable>
+              </>
+            ) : null}
             <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} accessibilityLabel={t('chat.menu')} style={{ padding: 6 }}>
               <Ionicons name="ellipsis-vertical" size={22} color={c.text} />
             </Pressable>
@@ -347,16 +467,46 @@ export default function ChatScreen() {
               {quoted ? (
                 <View style={{ borderLeftWidth: 3, borderLeftColor: own ? '#fff' : c.primary, paddingLeft: 8, marginBottom: 6, opacity: 0.9 }}>
                   <Text style={{ color: own ? '#fff' : c.primary, fontSize: 12, fontWeight: '700' }}>{quoted.sender_id === myId ? t('chats.you') : peerName}</Text>
-                  <Text style={{ color: own ? '#fff' : c.text, fontSize: 13 }} numberOfLines={1}>{quoted.deleted_at ? t('chat.deleted') : quoted.text ?? '🔒'}</Text>
+                  <Text style={{ color: own ? '#fff' : c.text, fontSize: 13 }} numberOfLines={1}>{quoted.deleted_at ? t('chat.deleted') : quoted.payload ? payloadSummary(quoted.payload) : '🔒'}</Text>
                 </View>
+              ) : null}
+              {!item.deleted_at && (item.pendingItems?.length || item.payload?.att.length) ? (
+                <MessageAttachments
+                  refs={item.payload?.att ?? []}
+                  pending={item.pendingItems}
+                  upload={item.upload}
+                  own={own}
+                  createdAt={item.created_at}
+                  onLongPress={() => openMenu(item)}
+                />
               ) : null}
               {item.deleted_at ? (
                 <Text style={{ color: meta, fontStyle: 'italic', fontSize: fs(15) }}>{t('chat.deleted')}</Text>
               ) : item.text === null ? (
                 <Text style={{ color: meta, fontStyle: 'italic', fontSize: fs(15) }}>🔒 {t('chat.cannotDecrypt')}</Text>
-              ) : (
+              ) : item.text ? (
                 <Text selectable style={{ color: own ? c.bubbleOwnText : c.bubbleOtherText, fontSize: fs(16), lineHeight: fs(21) }}>{item.text}</Text>
-              )}
+              ) : null}
+              {item.failed ? (
+                <View style={{ marginTop: 6, gap: 6 }}>
+                  <Text style={{ color: '#FECACA', fontSize: 12 }}>{item.upload?.error ?? t('chat.sendFailed')}</Text>
+                  <View style={{ flexDirection: 'row', gap: 14 }}>
+                    <Pressable onPress={() => runUpload(item.id)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="refresh" size={16} color="#fff" />
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>{t('common.retry')}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        uploads.current.delete(item.id);
+                        setMessages((prev) => (prev ?? []).filter((m) => m.id !== item.id));
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={{ color: 'rgba(255,255,255,0.8)' }}>{t('common.cancel')}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 2, gap: 4 }}>
                 {item.edited_at && !item.deleted_at ? <Text style={{ color: meta, fontSize: 11 }}>{t('chat.edited')}</Text> : null}
                 <Text style={{ color: meta, fontSize: 11 }}>{timeShort(item.created_at)}</Text>
@@ -380,11 +530,7 @@ export default function ChatScreen() {
                 <Text style={{ alignSelf: 'center', color: c.textMuted, fontSize: 12, marginVertical: 10, backgroundColor: c.surface, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, overflow: 'hidden' }}>{dayLabel(item.created_at)}</Text>
               ) : null}
               <Pressable
-                onLongPress={() => {
-                  if (item.pending || item.deleted_at) return;
-                  tap();
-                  setMsgMenu(item);
-                }}
+                onLongPress={() => openMenu(item)}
                 delayLongPress={280}
                 style={{ alignItems: own ? 'flex-end' : 'flex-start', marginVertical: 2 }}
               >
@@ -417,6 +563,11 @@ export default function ChatScreen() {
       {peer && !peer.public_key ? <Text style={{ color: c.textMuted, textAlign: 'center', padding: 12 }}>{t('chat.peerNoKey')}</Text> : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8), backgroundColor: c.surface, gap: 8 }}>
+        {!editing ? (
+          <Pressable onPress={() => setAttachMenu(true)} disabled={!peer?.public_key} accessibilityLabel={t('attach.attach')} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: peer?.public_key ? 1 : 0.4 }}>
+            <Ionicons name="attach" size={26} color={c.primary} style={{ transform: [{ rotate: '45deg' }] }} />
+          </Pressable>
+        ) : null}
         <TextInput
           value={text}
           onChangeText={onChangeText}
@@ -436,6 +587,19 @@ export default function ChatScreen() {
 
       <ActionSheet visible={menuOpen} title={peerName} actions={headerActions} onClose={() => setMenuOpen(false)} />
       <ActionSheet visible={!!msgMenu} actions={msgMenu ? messageActions(msgMenu) : []} onClose={() => setMsgMenu(null)} />
+      <ActionSheet visible={attachMenu} title={t('attach.title')} actions={attachActions} onClose={() => setAttachMenu(false)} />
+      {picked ? (
+        <AttachmentComposer
+          items={picked}
+          onRemove={(i) => setPicked((cur) => {
+            const next = (cur ?? []).filter((_, j) => j !== i);
+            return next.length ? next : null;
+          })}
+          onCancel={() => setPicked(null)}
+          onAddMore={() => addPicked(pickFromGallery)}
+          onSend={sendAttachments}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

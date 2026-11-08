@@ -50,6 +50,7 @@ export interface MessageRow {
 
 export interface DecryptedMessage extends MessageRow {
   text: string | null;
+  payload: import('@/services/payload').Payload | null;
 }
 
 export type Visibility = 'everyone' | 'contacts' | 'nobody';

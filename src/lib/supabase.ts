@@ -62,8 +62,15 @@ export const saveServerConfig = (cfg: ServerConfig) =>
 export const clearServerConfig = () => SecureStore.deleteItemAsync(CONFIG_KEY);
 
 let client: SupabaseClient | null = null;
+let activeConfig: ServerConfig | null = null;
+
+export const serverConfig = (): ServerConfig => {
+  if (!activeConfig) throw new Error(t('setup.notConfigured'));
+  return activeConfig;
+};
 
 export const initSupabase = (cfg: ServerConfig): SupabaseClient => {
+  activeConfig = cfg;
   client = createClient(cfg.url, cfg.anonKey, {
     auth: {
       storage: secureStorage,

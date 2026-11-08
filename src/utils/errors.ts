@@ -9,6 +9,7 @@ const known: [RegExp, TKey][] = [
   [/network request failed|failed to fetch|fetch failed/i, 'errors.network'],
   [/profiles_username_key|duplicate key.*username/i, 'errors.usernameTaken'],
   [/username_check|violates check constraint "profiles_username/i, 'errors.usernameFormat'],
+  [/privacy: user does not accept calls/i, 'errors.privacyCalls'],
   [/privacy: user does not accept/i, 'errors.privacyMessages'],
   [/row-level security/i, 'errors.forbidden'],
   [/blocked/i, 'errors.blocked'],
@@ -18,6 +19,8 @@ const known: [RegExp, TKey][] = [
 ];
 
 export const humanError = (e: unknown): string => {
+  // Errors created by the app itself already carry a localised, user-facing message.
+  if (e instanceof Error && e.name === 'AttachmentError') return e.message;
   const msg =
     e instanceof Error
       ? e.message

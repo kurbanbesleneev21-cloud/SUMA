@@ -111,7 +111,8 @@ let alice, bob;
   // Back to list: long-press chat → pin
   await alice.getByLabel('Назад').locator('visible=true').last().click();
   await T(alice, 'Боб Тест').waitFor({ timeout: 10000 });
-  await longPress(alice, T(alice, 'Боб Тест'));
+  await alice.waitForTimeout(900);
+  await longPress(alice, T(alice, /Вы: Отлично/));
   await T(alice, 'Закрепить', { exact: true }).waitFor({ timeout: 5000 });
   await shot(alice, '10-chat-actions');
   await T(alice, 'Закрепить', { exact: true }).click();

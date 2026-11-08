@@ -2,7 +2,7 @@
   "expo": {
     "name": "NEXO",
     "slug": "nexo-messenger",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "scheme": "nexo",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,14 +10,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nexo.messenger",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "config": {
         "usesNonExemptEncryption": true
       }
     },
     "android": {
       "package": "com.nexo.messenger",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#090910"
@@ -43,6 +43,40 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "NEXO использует Face ID, чтобы разблокировать приложение."
+        }
+      ],
+      "expo-video",
+      "expo-sharing",
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NEXO нужен доступ к фото, чтобы вы могли отправлять их в переписке.",
+          "cameraPermission": "NEXO использует камеру, чтобы вы могли снять и отправить фото или видео.",
+          "microphonePermission": "NEXO использует микрофон для записи видео со звуком."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "NEXO сохраняет полученные фото и видео в вашу галерею по вашему запросу.",
+          "savePhotosPermission": "NEXO сохраняет полученные фото и видео в вашу галерею по вашему запросу.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          }
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "NEXO использует камеру для видеозвонков.",
+          "microphonePermission": "NEXO использует микрофон для голосовых и видеозвонков."
         }
       ]
     ],

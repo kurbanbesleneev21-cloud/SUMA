@@ -7,7 +7,7 @@ import { useUserSettings } from '@/hooks/useUserSettings';
 import { useT, TKey } from '@/i18n';
 import type { UserSettings, Visibility } from '@/types';
 
-type VisibilityField = 'last_seen_visibility' | 'online_visibility' | 'who_can_message';
+type VisibilityField = 'last_seen_visibility' | 'online_visibility' | 'who_can_message' | 'who_can_call';
 
 const labels: Record<Visibility, TKey> = { everyone: 'privacy.everyone', contacts: 'privacy.contacts', nobody: 'privacy.nobody' };
 
@@ -20,16 +20,18 @@ export default function PrivacyScreen() {
 
   if (!settings && !error) return <Loading />;
 
-  const rows: { field: VisibilityField; label: TKey; icon: 'time' | 'radio-button-on' | 'chatbubbles' }[] = [
+  const rows: { field: VisibilityField; label: TKey; icon: 'time' | 'radio-button-on' | 'chatbubbles' | 'call' }[] = [
     { field: 'last_seen_visibility', label: 'privacy.lastSeen', icon: 'time' },
     { field: 'online_visibility', label: 'privacy.online', icon: 'radio-button-on' },
     { field: 'who_can_message', label: 'privacy.whoCanMessage', icon: 'chatbubbles' },
+    { field: 'who_can_call', label: 'privacy.whoCanCall', icon: 'call' },
   ];
 
   const titles: Record<VisibilityField, TKey> = {
     last_seen_visibility: 'privacy.lastSeen',
     online_visibility: 'privacy.online',
     who_can_message: 'privacy.whoCanMessage',
+    who_can_call: 'privacy.whoCanCall',
   };
 
   return (

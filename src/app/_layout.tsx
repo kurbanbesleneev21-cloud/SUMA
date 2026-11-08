@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { registerGlobals } from '@livekit/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -11,6 +12,8 @@ import { OfflineBanner } from '@/components/ui';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// WebRTC globals for LiveKit calls; must run before any call code.
+registerGlobals();
 
 function Navigation() {
   const { ready, configured, session } = useAuth();
