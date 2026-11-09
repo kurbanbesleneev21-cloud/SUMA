@@ -78,6 +78,14 @@
           "cameraPermission": "NEXO использует камеру для видеозвонков.",
           "microphonePermission": "NEXO использует микрофон для голосовых и видеозвонков."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-keep class livekit.org.webrtc.** { *; }\n-dontwarn livekit.org.webrtc.**\n-keep class livekit.org.jni_zero.** { *; }\n-dontwarn livekit.org.jni_zero.**\n-keep class io.livekit.** { *; }"
+          }
+        }
       ]
     ],
     "experiments": {
